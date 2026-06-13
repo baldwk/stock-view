@@ -1,0 +1,98 @@
+<!--
+  @(#)data_status.html, June 13, 2026.
+  <p/>
+  Copyright 2026 fenbi.com. All rights reserved.
+  FENBI.COM PROPRIETARY/CONFIDENTIAL. Use is subject to license terms.
+
+  @Author: wukeyu
+  @Date: 2026/6/13 20:47
+-->
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>数据拉取状态</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <header class="hero">
+    <nav class="top-nav" aria-label="主导航">
+      <a href="/">Renko</a>
+      <a href="/recommendations">ZXT 推荐</a>
+      <a href="/kline">日K图</a>
+      <a class="active" href="/data-status">数据状态</a>
+    </nav>
+    <div>
+      <p class="eyebrow">Data Import</p>
+      <h1>数据拉取状态</h1>
+      <p class="subtitle">实时查看股票基础数据、日K入库数量、日期范围和当前覆盖进度。</p>
+    </div>
+  </header>
+
+  <main class="layout">
+    <section class="panel toolbar" aria-label="状态操作">
+      <button id="reloadButton" type="button">刷新状态</button>
+      <button id="autoRefreshButton" class="secondary-button" type="button">暂停自动刷新</button>
+      <span id="statusText" class="status-text inline-status">-</span>
+    </section>
+
+    <section class="stats" aria-label="数据概览">
+      <article class="stat-card">
+        <span>股票总数</span>
+        <strong id="totalStocksText">-</strong>
+      </article>
+      <article class="stat-card">
+        <span>已有日K股票</span>
+        <strong id="stocksWithPricesText">-</strong>
+      </article>
+      <article class="stat-card">
+        <span>日K总行数</span>
+        <strong id="dailyPriceRowsText">-</strong>
+      </article>
+      <article class="stat-card">
+        <span>日期范围</span>
+        <strong id="dateRangeText">-</strong>
+      </article>
+    </section>
+
+    <section class="panel status-panel" aria-label="进度">
+      <div class="section-heading">
+        <div>
+          <h2>拉取进度</h2>
+          <p>按“已有至少 1 条日K”的股票数量统计。</p>
+        </div>
+        <strong id="progressText" class="progress-number">-</strong>
+      </div>
+      <div class="progress-track">
+        <div id="progressBar" class="progress-bar"></div>
+      </div>
+      <div id="bucketGrid" class="bucket-grid"></div>
+    </section>
+
+    <section class="status-grid">
+      <article class="panel status-panel">
+        <div class="section-heading">
+          <div>
+            <h2>已拉取样例</h2>
+            <p>展示部分已有日K数据的股票。</p>
+          </div>
+        </div>
+        <div id="loadedList" class="status-list"></div>
+      </article>
+
+      <article class="panel status-panel">
+        <div class="section-heading">
+          <div>
+            <h2>待拉取样例</h2>
+            <p>展示部分尚未写入日K的股票。</p>
+          </div>
+        </div>
+        <div id="pendingList" class="status-list"></div>
+      </article>
+    </section>
+  </main>
+
+  <script src="/data_status.js"></script>
+</body>
+</html>

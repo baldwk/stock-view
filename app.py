@@ -16,6 +16,7 @@ from flask import Flask, jsonify, request, send_from_directory
 
 from data_source import get_data_source
 from database import (
+    get_data_pull_status,
     get_latest_zxt_reversal_screen_run,
     get_last_trade_date,
     get_prices,
@@ -267,9 +268,19 @@ def kline_page():
     return send_from_directory(app.static_folder, "kline.html")
 
 
+@app.get("/data-status")
+def data_status_page():
+    return send_from_directory(app.static_folder, "data_status.html")
+
+
 @app.get("/api/stocks")
 def stocks_api():
     return jsonify({"stocks": list_stocks()})
+
+
+@app.get("/api/data-status")
+def data_status_api():
+    return jsonify(get_data_pull_status())
 
 
 @app.get("/api/stocks/<symbol>/prices")

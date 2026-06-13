@@ -464,6 +464,79 @@ def list_stocks():
     return [dict(row) for row in rows]
 
 
+def get_data_pull_status():
+    with get_connection() as conn:
+        summary = conn.execute(
+            """
+            SELECT
+                COUNT(s.symbol) AS total_stocks,
+                COALESCE(SUM(CASE WHEN price_stats.price_count > 0 THEN 1 ELSE 0 END), 0) AS stocks_with_prices,
+                COALESCE(SUM(CASE WHEN price_stats.price_count IS NULL THEN 1 ELSE 0 END), 0) AS stocks_without_prices,
+                COALESCE(SUM(price_stats.price_count), 0) AS daily_price_rows,
+                MIN(price_stats.start_date) AS start_date,
+                MAX(price_stats.end_date) AS end_date,
+                COALESCE(MAX(price_stats.price_count), 0) AS max_price_count
+            FROM stocks s
+            LEFT JOIN (
+                SELECT
+                    symbol,
+                    COUNT(*) AS price_count,
+                    MIN(trade_date) AS start_date,
+                    MAX(trade_date) AS end_date
+                FROM daily_prices
+                GROUP BY symbol
+            ) price_stats ON price_stats.symbol = s.symbol
+            """
+        ).fetchone()
+        buckets = conn.execute(
+            """
+            SELECT
+                SUM(CASE WHEN price_count = 0 THEN 1 ELSE 0 END) AS no_data,
+                SUM(CASE WHEN price_count > 0 AND price_count < 100 THEN 1 ELSE 0 END) AS under_100,
+                SUM(CASE WHEN price_count >= 100 AND price_count < 1000 THEN 1 ELSE 0 END) AS under_1000,
+                SUM(CASE WHEN price_count >= 1000 THEN 1 ELSE 0 END) AS over_1000
+            FROM (
+                SELECT s.symbol, COUNT(p.trade_date) AS price_count
+                FROM stocks s
+                LEFT JOIN daily_prices p ON p.symbol = s.symbol
+                GROUP BY s.symbol
+            )
+            """
+        ).fetchone()
+        loaded_samples = conn.execute(
+            """
+            SELECT
+                s.symbol,
+                s.name,
+                COUNT(p.trade_date) AS price_count,
+                MIN(p.trade_date) AS start_date,
+                MAX(p.trade_date) AS end_date
+            FROM stocks s
+            JOIN daily_prices p ON p.symbol = s.symbol
+            GROUP BY s.symbol, s.name
+            ORDER BY s.symbol DESC
+            LIMIT 12
+            """
+        ).fetchall()
+        pending_samples = conn.execute(
+            """
+            SELECT s.symbol, s.name
+            FROM stocks s
+            LEFT JOIN daily_prices p ON p.symbol = s.symbol
+            WHERE p.symbol IS NULL
+            GROUP BY s.symbol, s.name
+            ORDER BY s.symbol
+            LIMIT 12
+            """
+        ).fetchall()
+
+    result = dict(summary)
+    result["buckets"] = dict(buckets)
+    result["loaded_samples"] = [dict(row) for row in loaded_samples]
+    result["pending_samples"] = [dict(row) for row in pending_samples]
+    return result
+
+
 def get_prices(symbol, start_date=None, end_date=None):
     params = [symbol]
     clauses = ["symbol = ?"]
