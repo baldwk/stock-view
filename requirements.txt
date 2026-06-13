@@ -1,0 +1,13 @@
+# @(#)requirements.txt, June 3, 2026.
+# <p/>
+# Copyright 2026 fenbi.com. All rights reserved.
+# FENBI.COM PROPRIETARY/CONFIDENTIAL. Use is subject to license terms.
+#
+# @Author: wukeyu
+# @Date: 2026/6/3 12:47
+
+akshare
+flask
+pandas
+requests
+waitress

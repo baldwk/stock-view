@@ -1,0 +1,89 @@
+<!--
+  @(#)recommendations.html, June 13, 2026.
+  <p/>
+  Copyright 2026 fenbi.com. All rights reserved.
+  FENBI.COM PROPRIETARY/CONFIDENTIAL. Use is subject to license terms.
+
+  @Author: wukeyu
+  @Date: 2026/6/13 20:01
+-->
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ZXT 推荐股票</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <header class="hero">
+    <nav class="top-nav" aria-label="主导航">
+      <a href="/">Renko</a>
+      <a class="active" href="/recommendations">ZXT 推荐</a>
+      <a href="/kline">日K图</a>
+    </nav>
+    <div>
+      <p class="eyebrow">ZXT Reversal</p>
+      <h1>ZXT 推荐股票</h1>
+      <p class="subtitle">展示最近一次 14:30 盘中推荐或 16:00 收盘后推荐，点击股票可跳转到日K图。</p>
+    </div>
+  </header>
+
+  <main class="layout">
+    <section class="panel toolbar" aria-label="推荐筛选">
+      <label>
+        推荐类型
+        <select id="runTypeSelect">
+          <option value="">最近一次</option>
+          <option value="intraday_1430">14:30 盘中推荐</option>
+          <option value="close_1600">16:00 收盘后推荐</option>
+        </select>
+      </label>
+
+      <label>
+        展示数量
+        <input id="limitInput" type="number" min="1" step="1" value="50" />
+      </label>
+
+      <button id="reloadButton" type="button">刷新推荐</button>
+      <button id="runIntradayButton" class="secondary-button" type="button">手动跑盘中推荐</button>
+      <button id="runCloseButton" class="secondary-button" type="button">手动跑收盘推荐</button>
+    </section>
+
+    <section class="stats" aria-label="推荐概览">
+      <article class="stat-card">
+        <span>推荐类型</span>
+        <strong id="runTypeText">-</strong>
+      </article>
+      <article class="stat-card">
+        <span>交易日</span>
+        <strong id="tradeDateText">-</strong>
+      </article>
+      <article class="stat-card">
+        <span>筛选时间</span>
+        <strong id="screenedAtText">-</strong>
+      </article>
+      <article class="stat-card">
+        <span>推荐数量</span>
+        <strong id="itemCountText">-</strong>
+      </article>
+    </section>
+
+    <section class="panel screener-panel" aria-label="推荐结果">
+      <div class="section-heading">
+        <div>
+          <h2>推荐结果</h2>
+          <p>默认只展示命中 XG 条件的股票。</p>
+        </div>
+      </div>
+      <div id="recommendationResult" class="screener-result">
+        <div class="empty-result">正在加载推荐结果...</div>
+      </div>
+    </section>
+
+    <p id="statusText" class="status-text"></p>
+  </main>
+
+  <script src="/recommendations.js"></script>
+</body>
+</html>

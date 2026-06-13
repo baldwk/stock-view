@@ -1,0 +1,83 @@
+<!--
+  @(#)kline.html, June 13, 2026.
+  <p/>
+  Copyright 2026 fenbi.com. All rights reserved.
+  FENBI.COM PROPRIETARY/CONFIDENTIAL. Use is subject to license terms.
+
+  @Author: wukeyu
+  @Date: 2026/6/13 20:01
+-->
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>A 股日K图</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <header class="hero">
+    <nav class="top-nav" aria-label="主导航">
+      <a href="/">Renko</a>
+      <a href="/recommendations">ZXT 推荐</a>
+      <a class="active" href="/kline">日K图</a>
+    </nav>
+    <div>
+      <p class="eyebrow">Daily K Line</p>
+      <h1>A 股日K图</h1>
+      <p class="subtitle">选择股票后展示日K蜡烛图，并在下方展示每日成交量。</p>
+    </div>
+  </header>
+
+  <main class="layout">
+    <section class="panel toolbar" aria-label="K线查询条件">
+      <label>
+        股票
+        <select id="stockSelect"></select>
+      </label>
+
+      <label>
+        开始日期
+        <input id="startDateInput" type="date" />
+      </label>
+
+      <label>
+        结束日期
+        <input id="endDateInput" type="date" />
+      </label>
+
+      <button id="reloadButton" type="button">刷新</button>
+      <button id="resetRangeButton" class="secondary-button" type="button">全部区间</button>
+    </section>
+
+    <section class="stats" aria-label="K线概览">
+      <article class="stat-card">
+        <span>股票</span>
+        <strong id="stockText">-</strong>
+      </article>
+      <article class="stat-card">
+        <span>数据区间</span>
+        <strong id="dateRangeText">-</strong>
+      </article>
+      <article class="stat-card">
+        <span>日K数量</span>
+        <strong id="priceCountText">-</strong>
+      </article>
+      <article class="stat-card">
+        <span>最新收盘</span>
+        <strong id="latestCloseText">-</strong>
+      </article>
+    </section>
+
+    <section class="panel kline-panel" aria-label="日K图">
+      <div id="klineChart" class="kline-chart"></div>
+      <div id="klineEmptyState" class="empty-state">请先选择股票。</div>
+    </section>
+
+    <p id="statusText" class="status-text"></p>
+  </main>
+
+  <script src="https://unpkg.com/lightweight-charts@4.2.3/dist/lightweight-charts.standalone.production.js"></script>
+  <script src="/kline.js"></script>
+</body>
+</html>

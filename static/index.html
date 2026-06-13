@@ -1,0 +1,116 @@
+<!--
+  @(#)index.html, June 3, 2026.
+  <p/>
+  Copyright 2026 fenbi.com. All rights reserved.
+  FENBI.COM PROPRIETARY/CONFIDENTIAL. Use is subject to license terms.
+
+  @Author: wukeyu
+  @Date: 2026/6/3 12:47
+-->
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>中国 A 股 Renko Chart</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <header class="hero">
+    <nav class="top-nav" aria-label="主导航">
+      <a href="/">Renko</a>
+      <a href="/recommendations">ZXT 推荐</a>
+      <a href="/kline">日K图</a>
+    </nav>
+    <div>
+      <p class="eyebrow">A-share Close Price</p>
+      <h1>中国 A 股砖块图 Renko Chart</h1>
+      <p class="subtitle">基于 SQLite 中存储的日收盘价生成 Renko 砖块，便于观察趋势变化。</p>
+    </div>
+  </header>
+
+  <main class="layout">
+    <section class="panel toolbar" aria-label="查询条件">
+      <label>
+        股票
+        <select id="stockSelect"></select>
+      </label>
+
+      <label>
+        砖块大小
+        <input id="brickSizeInput" type="number" min="0" step="0.01" placeholder="自动" />
+      </label>
+
+      <label>
+        开始日期
+        <input id="startDateInput" type="date" />
+      </label>
+
+      <label>
+        结束日期
+        <input id="endDateInput" type="date" />
+      </label>
+
+      <button id="reloadButton" type="button">刷新</button>
+      <button id="resetZoomButton" class="secondary-button" type="button">重置缩放</button>
+    </section>
+
+    <section class="panel screener-panel" aria-label="连续上涨砖块筛选">
+      <div class="section-heading">
+        <div>
+          <h2>连续上涨砖块筛选</h2>
+          <p>筛选最近至少连续 X 个 Renko 砖块上涨的公司，并展示当前总市值。</p>
+        </div>
+      </div>
+
+      <div class="toolbar compact-toolbar">
+        <label>
+          连续上涨砖块数
+          <input id="upBrickCountInput" type="number" min="1" step="1" value="3" />
+        </label>
+
+        <label>
+          展示数量
+          <input id="screenerLimitInput" type="number" min="1" step="1" value="50" />
+        </label>
+
+        <button id="runScreenerButton" type="button">筛选公司</button>
+      </div>
+
+      <div id="screenerResult" class="screener-result">
+        <div class="empty-result">点击“筛选公司”查看结果。</div>
+      </div>
+    </section>
+
+    <section class="stats" aria-label="数据概览">
+      <article class="stat-card">
+        <span>数据区间</span>
+        <strong id="dateRange">-</strong>
+      </article>
+      <article class="stat-card">
+        <span>收盘价数量</span>
+        <strong id="priceCount">-</strong>
+      </article>
+      <article class="stat-card">
+        <span>砖块数量</span>
+        <strong id="brickCount">-</strong>
+      </article>
+      <article class="stat-card">
+        <span>当前砖块大小</span>
+        <strong id="brickSizeText">-</strong>
+      </article>
+    </section>
+
+    <section class="panel chart-panel" aria-label="Renko 图">
+      <canvas id="renkoCanvas"></canvas>
+      <div id="selectionBox" class="selection-box" hidden></div>
+      <div id="emptyState" class="empty-state">请先运行数据脚本，然后刷新页面。</div>
+    </section>
+
+    <p class="chart-tip">提示：在图表区域横向拖拽可选择日期范围并缩放。</p>
+    <p id="statusText" class="status-text"></p>
+  </main>
+
+  <script src="/app.js"></script>
+</body>
+</html>
