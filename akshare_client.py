@@ -24,22 +24,30 @@ def is_sse_or_szse_symbol(symbol):
     return symbol.startswith(SSE_PREFIXES) or symbol.startswith(SZSE_PREFIXES)
 
 
+def normalize_exchange_symbol(symbol):
+    normalized_symbol = str(symbol).split(".")[0].strip().lower()
+    if normalized_symbol.startswith(("sh", "sz", "bj")):
+        normalized_symbol = normalized_symbol[2:]
+    return normalized_symbol.zfill(6)
+
+
 def fetch_sse_szse_stocks():
-    df = ak.stock_info_a_code_name()
+    logging.info("Fetching SSE/SZSE stock list from AkShare spot API")
+    df = ak.stock_zh_a_spot()
     if df.empty:
         return []
 
-    code_col = "code" if "code" in df.columns else "代码"
-    name_col = "name" if "name" in df.columns else "名称"
-    if code_col not in df.columns or name_col not in df.columns:
-        raise ValueError("AkShare stock list response missing code/name columns")
+    columns = list(df.columns)
+    code_col = "code" if "code" in df.columns else "代码" if "代码" in df.columns else columns[0]
+    name_col = "name" if "name" in df.columns else "名称" if "名称" in df.columns else columns[1]
 
     stocks = []
     for _, row in df.iterrows():
-        symbol = str(row[code_col]).split(".")[0].zfill(6)
+        symbol = normalize_exchange_symbol(row[code_col])
         if is_sse_or_szse_symbol(symbol):
             stocks.append({"symbol": symbol, "name": str(row[name_col])})
 
+    logging.info("Fetched %s spot rows, selected %s SSE/SZSE stocks", len(df), len(stocks))
     return stocks
 
 
