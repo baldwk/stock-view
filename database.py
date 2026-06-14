@@ -47,6 +47,19 @@ ON daily_prices(price_updated_at);
 CREATE INDEX IF NOT EXISTS idx_daily_prices_symbol_updated_at
 ON daily_prices(symbol, price_updated_at);
 
+CREATE TABLE IF NOT EXISTS stock_price_stats (
+    symbol TEXT PRIMARY KEY,
+    price_count INTEGER NOT NULL,
+    start_date TEXT,
+    end_date TEXT,
+    last_price_updated_at TEXT,
+    last_updated_rows INTEGER NOT NULL,
+    FOREIGN KEY (symbol) REFERENCES stocks(symbol) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_stock_price_stats_updated_at
+ON stock_price_stats(last_price_updated_at);
+
 CREATE TABLE IF NOT EXISTS zxt_reversal_results (
     symbol TEXT NOT NULL,
     name TEXT NOT NULL,
@@ -255,7 +268,75 @@ def upsert_prices(symbol, prices):
             """,
             rows,
         )
+        refresh_stock_price_stat(conn, symbol, price_updated_at, len(rows))
     return len(rows)
+
+
+def refresh_stock_price_stat(conn, symbol, last_price_updated_at=None, last_updated_rows=0):
+    row = conn.execute(
+        """
+        SELECT
+            COUNT(*) AS price_count,
+            MIN(trade_date) AS start_date,
+            MAX(trade_date) AS end_date
+        FROM daily_prices
+        WHERE symbol = ?
+        """,
+        (symbol,),
+    ).fetchone()
+    conn.execute(
+        """
+        INSERT INTO stock_price_stats(
+            symbol,
+            price_count,
+            start_date,
+            end_date,
+            last_price_updated_at,
+            last_updated_rows
+        )
+        VALUES (?, ?, ?, ?, ?, ?)
+        ON CONFLICT(symbol) DO UPDATE SET
+            price_count = excluded.price_count,
+            start_date = excluded.start_date,
+            end_date = excluded.end_date,
+            last_price_updated_at = COALESCE(excluded.last_price_updated_at, stock_price_stats.last_price_updated_at),
+            last_updated_rows = excluded.last_updated_rows
+        """,
+        (
+            symbol,
+            row["price_count"],
+            row["start_date"],
+            row["end_date"],
+            last_price_updated_at,
+            last_updated_rows,
+        ),
+    )
+
+
+def rebuild_stock_price_stats():
+    with get_connection() as conn:
+        conn.execute("DELETE FROM stock_price_stats")
+        conn.execute(
+            """
+            INSERT INTO stock_price_stats(
+                symbol,
+                price_count,
+                start_date,
+                end_date,
+                last_price_updated_at,
+                last_updated_rows
+            )
+            SELECT
+                symbol,
+                COUNT(*) AS price_count,
+                MIN(trade_date) AS start_date,
+                MAX(trade_date) AS end_date,
+                MAX(price_updated_at) AS last_price_updated_at,
+                COUNT(*) AS last_updated_rows
+            FROM daily_prices
+            GROUP BY symbol
+            """
+        )
 
 
 def upsert_zxt_reversal_results(results):
@@ -473,13 +554,12 @@ def list_stocks():
                 s.market_cap,
                 s.market_cap_updated_at,
                 s.updated_at,
-                COUNT(p.trade_date) AS price_count,
-                MIN(p.trade_date) AS start_date,
-                MAX(p.trade_date) AS end_date,
-                MAX(p.price_updated_at) AS price_updated_at
+                COALESCE(ps.price_count, 0) AS price_count,
+                ps.start_date,
+                ps.end_date,
+                ps.last_price_updated_at AS price_updated_at
             FROM stocks s
-            LEFT JOIN daily_prices p ON p.symbol = s.symbol
-            GROUP BY s.symbol, s.name, s.market_cap, s.market_cap_updated_at, s.updated_at
+            LEFT JOIN stock_price_stats ps ON ps.symbol = s.symbol
             ORDER BY s.symbol
             """
         ).fetchall()
@@ -494,51 +574,39 @@ def get_data_pull_status(update_date=None):
             """
             SELECT
                 COUNT(s.symbol) AS total_stocks,
-                COALESCE(SUM(CASE WHEN price_stats.price_count > 0 THEN 1 ELSE 0 END), 0) AS stocks_with_prices,
-                COALESCE(SUM(CASE WHEN price_stats.price_count IS NULL THEN 1 ELSE 0 END), 0) AS stocks_without_prices,
-                COALESCE(SUM(price_stats.price_count), 0) AS daily_price_rows,
-                MIN(price_stats.start_date) AS start_date,
-                MAX(price_stats.end_date) AS end_date,
-                COALESCE(MAX(price_stats.price_count), 0) AS max_price_count
+                COALESCE(SUM(CASE WHEN ps.price_count > 0 THEN 1 ELSE 0 END), 0) AS stocks_with_prices,
+                COALESCE(SUM(CASE WHEN ps.price_count IS NULL THEN 1 ELSE 0 END), 0) AS stocks_without_prices,
+                COALESCE(SUM(ps.price_count), 0) AS daily_price_rows,
+                MIN(ps.start_date) AS start_date,
+                MAX(ps.end_date) AS end_date,
+                COALESCE(MAX(ps.price_count), 0) AS max_price_count
             FROM stocks s
-            LEFT JOIN (
-                SELECT
-                    symbol,
-                    COUNT(*) AS price_count,
-                    MIN(trade_date) AS start_date,
-                    MAX(trade_date) AS end_date
-                FROM daily_prices
-                GROUP BY symbol
-            ) price_stats ON price_stats.symbol = s.symbol
+            LEFT JOIN stock_price_stats ps ON ps.symbol = s.symbol
             """
         ).fetchone()
         update_summary = conn.execute(
             """
             SELECT
-                COUNT(DISTINCT symbol) AS updated_stocks,
-                COUNT(*) AS updated_rows,
-                MIN(trade_date) AS updated_start_date,
-                MAX(trade_date) AS updated_end_date,
-                MIN(price_updated_at) AS first_updated_at,
-                MAX(price_updated_at) AS last_updated_at
-            FROM daily_prices
-            WHERE price_updated_at >= ? AND price_updated_at < ?
+                COUNT(symbol) AS updated_stocks,
+                COALESCE(SUM(last_updated_rows), 0) AS updated_rows,
+                MIN(start_date) AS updated_start_date,
+                MAX(end_date) AS updated_end_date,
+                MIN(last_price_updated_at) AS first_updated_at,
+                MAX(last_price_updated_at) AS last_updated_at
+            FROM stock_price_stats
+            WHERE last_price_updated_at >= ? AND last_price_updated_at < ?
             """,
             (resolved_update_date, next_update_date),
         ).fetchone()
         buckets = conn.execute(
             """
             SELECT
-                SUM(CASE WHEN price_count = 0 THEN 1 ELSE 0 END) AS no_data,
-                SUM(CASE WHEN price_count > 0 AND price_count < 100 THEN 1 ELSE 0 END) AS under_100,
-                SUM(CASE WHEN price_count >= 100 AND price_count < 1000 THEN 1 ELSE 0 END) AS under_1000,
-                SUM(CASE WHEN price_count >= 1000 THEN 1 ELSE 0 END) AS over_1000
-            FROM (
-                SELECT s.symbol, COUNT(p.trade_date) AS price_count
-                FROM stocks s
-                LEFT JOIN daily_prices p ON p.symbol = s.symbol
-                GROUP BY s.symbol
-            )
+                SUM(CASE WHEN COALESCE(ps.price_count, 0) = 0 THEN 1 ELSE 0 END) AS no_data,
+                SUM(CASE WHEN ps.price_count > 0 AND ps.price_count < 100 THEN 1 ELSE 0 END) AS under_100,
+                SUM(CASE WHEN ps.price_count >= 100 AND ps.price_count < 1000 THEN 1 ELSE 0 END) AS under_1000,
+                SUM(CASE WHEN ps.price_count >= 1000 THEN 1 ELSE 0 END) AS over_1000
+            FROM stocks s
+            LEFT JOIN stock_price_stats ps ON ps.symbol = s.symbol
             """
         ).fetchone()
         loaded_samples = conn.execute(
@@ -546,12 +614,11 @@ def get_data_pull_status(update_date=None):
             SELECT
                 s.symbol,
                 s.name,
-                COUNT(p.trade_date) AS price_count,
-                MIN(p.trade_date) AS start_date,
-                MAX(p.trade_date) AS end_date
+                ps.price_count,
+                ps.start_date,
+                ps.end_date
             FROM stocks s
-            JOIN daily_prices p ON p.symbol = s.symbol
-            GROUP BY s.symbol, s.name
+            JOIN stock_price_stats ps ON ps.symbol = s.symbol
             ORDER BY s.symbol DESC
             LIMIT 12
             """
@@ -560,9 +627,8 @@ def get_data_pull_status(update_date=None):
             """
             SELECT s.symbol, s.name
             FROM stocks s
-            LEFT JOIN daily_prices p ON p.symbol = s.symbol
-            WHERE p.symbol IS NULL
-            GROUP BY s.symbol, s.name
+            LEFT JOIN stock_price_stats ps ON ps.symbol = s.symbol
+            WHERE ps.symbol IS NULL OR ps.price_count = 0
             ORDER BY s.symbol
             LIMIT 12
             """
@@ -572,14 +638,13 @@ def get_data_pull_status(update_date=None):
             SELECT
                 s.symbol,
                 s.name,
-                COUNT(p.trade_date) AS updated_rows,
-                MIN(p.trade_date) AS start_date,
-                MAX(p.trade_date) AS end_date,
-                MAX(p.price_updated_at) AS last_updated_at
+                ps.last_updated_rows AS updated_rows,
+                ps.start_date,
+                ps.end_date,
+                ps.last_price_updated_at AS last_updated_at
             FROM stocks s
-            JOIN daily_prices p ON p.symbol = s.symbol
-            WHERE p.price_updated_at >= ? AND p.price_updated_at < ?
-            GROUP BY s.symbol, s.name
+            JOIN stock_price_stats ps ON ps.symbol = s.symbol
+            WHERE ps.last_price_updated_at >= ? AND ps.last_price_updated_at < ?
             ORDER BY last_updated_at DESC, s.symbol
             LIMIT 12
             """,
