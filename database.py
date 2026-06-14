@@ -8,7 +8,7 @@
 
 import os
 import sqlite3
-from datetime import datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 
@@ -40,6 +40,12 @@ CREATE TABLE IF NOT EXISTS daily_prices (
 
 CREATE INDEX IF NOT EXISTS idx_daily_prices_symbol_date
 ON daily_prices(symbol, trade_date);
+
+CREATE INDEX IF NOT EXISTS idx_daily_prices_price_updated_at
+ON daily_prices(price_updated_at);
+
+CREATE INDEX IF NOT EXISTS idx_daily_prices_symbol_updated_at
+ON daily_prices(symbol, price_updated_at);
 
 CREATE TABLE IF NOT EXISTS zxt_reversal_results (
     symbol TEXT NOT NULL,
@@ -482,6 +488,7 @@ def list_stocks():
 
 def get_data_pull_status(update_date=None):
     resolved_update_date = update_date or datetime.now().astimezone().date().isoformat()
+    next_update_date = (date.fromisoformat(resolved_update_date) + timedelta(days=1)).isoformat()
     with get_connection() as conn:
         summary = conn.execute(
             """
@@ -515,9 +522,9 @@ def get_data_pull_status(update_date=None):
                 MIN(price_updated_at) AS first_updated_at,
                 MAX(price_updated_at) AS last_updated_at
             FROM daily_prices
-            WHERE substr(price_updated_at, 1, 10) = ?
+            WHERE price_updated_at >= ? AND price_updated_at < ?
             """,
-            (resolved_update_date,),
+            (resolved_update_date, next_update_date),
         ).fetchone()
         buckets = conn.execute(
             """
@@ -571,12 +578,12 @@ def get_data_pull_status(update_date=None):
                 MAX(p.price_updated_at) AS last_updated_at
             FROM stocks s
             JOIN daily_prices p ON p.symbol = s.symbol
-            WHERE substr(p.price_updated_at, 1, 10) = ?
+            WHERE p.price_updated_at >= ? AND p.price_updated_at < ?
             GROUP BY s.symbol, s.name
             ORDER BY last_updated_at DESC, s.symbol
             LIMIT 12
             """,
-            (resolved_update_date,),
+            (resolved_update_date, next_update_date),
         ).fetchall()
 
     result = dict(summary)
