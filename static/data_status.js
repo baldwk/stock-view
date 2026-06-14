@@ -13,6 +13,7 @@ let autoRefresh = true;
 let refreshTimer = null;
 
 document.addEventListener("DOMContentLoaded", () => {
+  els.updateDateInput = document.getElementById("updateDateInput");
   els.reloadButton = document.getElementById("reloadButton");
   els.autoRefreshButton = document.getElementById("autoRefreshButton");
   els.statusText = document.getElementById("statusText");
@@ -20,12 +21,19 @@ document.addEventListener("DOMContentLoaded", () => {
   els.stocksWithPricesText = document.getElementById("stocksWithPricesText");
   els.dailyPriceRowsText = document.getElementById("dailyPriceRowsText");
   els.dateRangeText = document.getElementById("dateRangeText");
+  els.updateDateText = document.getElementById("updateDateText");
+  els.updatedStocksText = document.getElementById("updatedStocksText");
+  els.updatedRowsText = document.getElementById("updatedRowsText");
+  els.lastUpdatedAtText = document.getElementById("lastUpdatedAtText");
   els.progressText = document.getElementById("progressText");
   els.progressBar = document.getElementById("progressBar");
   els.bucketGrid = document.getElementById("bucketGrid");
+  els.updatedList = document.getElementById("updatedList");
   els.loadedList = document.getElementById("loadedList");
   els.pendingList = document.getElementById("pendingList");
 
+  els.updateDateInput.value = formatLocalDate(new Date());
+  els.updateDateInput.addEventListener("change", loadStatus);
   els.reloadButton.addEventListener("click", loadStatus);
   els.autoRefreshButton.addEventListener("click", toggleAutoRefresh);
 
@@ -36,7 +44,12 @@ document.addEventListener("DOMContentLoaded", () => {
 async function loadStatus() {
   setStatus("正在刷新...");
   try {
-    const response = await fetch(`/api/data-status?_=${Date.now()}`);
+    const params = new URLSearchParams();
+    if (els.updateDateInput.value) {
+      params.set("update_date", els.updateDateInput.value);
+    }
+    params.set("_", String(Date.now()));
+    const response = await fetch(`/api/data-status?${params.toString()}`);
     if (!response.ok) {
       const data = await response.json();
       throw new Error(data.error || "数据状态接口请求失败");
@@ -54,15 +67,23 @@ function renderStatus(data) {
   const totalStocks = Number(data.total_stocks || 0);
   const stocksWithPrices = Number(data.stocks_with_prices || 0);
   const dailyPriceRows = Number(data.daily_price_rows || 0);
+  const todayUpdate = data.today_update || {};
+  const updatedStocks = Number(todayUpdate.updated_stocks || 0);
+  const updatedRows = Number(todayUpdate.updated_rows || 0);
   const progress = totalStocks > 0 ? (stocksWithPrices / totalStocks) * 100 : 0;
 
   els.totalStocksText.textContent = formatInteger(totalStocks);
   els.stocksWithPricesText.textContent = `${formatInteger(stocksWithPrices)} / ${formatInteger(totalStocks)}`;
   els.dailyPriceRowsText.textContent = formatInteger(dailyPriceRows);
   els.dateRangeText.textContent = data.start_date && data.end_date ? `${data.start_date} 至 ${data.end_date}` : "-";
+  els.updateDateText.textContent = data.update_date || "-";
+  els.updatedStocksText.textContent = formatInteger(updatedStocks);
+  els.updatedRowsText.textContent = formatInteger(updatedRows);
+  els.lastUpdatedAtText.textContent = formatDateTime(todayUpdate.last_updated_at);
   els.progressText.textContent = `${progress.toFixed(2)}%`;
   els.progressBar.style.width = `${Math.min(progress, 100)}%`;
   renderBuckets(data.buckets || {});
+  renderUpdatedList(data.updated_samples || []);
   renderLoadedList(data.loaded_samples || []);
   renderPendingList(data.pending_samples || []);
 }
@@ -81,6 +102,25 @@ function renderBuckets(buckets) {
           <span>${label}</span>
           <strong>${formatInteger(value)}</strong>
         </div>
+      `
+    )
+    .join("");
+}
+
+function renderUpdatedList(items) {
+  if (items.length === 0) {
+    els.updatedList.innerHTML = `<div class="empty-result">查询日期暂无更新记录。</div>`;
+    return;
+  }
+
+  els.updatedList.innerHTML = items
+    .map(
+      (item) => `
+        <a class="status-row" href="/kline?symbol=${encodeURIComponent(item.symbol)}">
+          <span>${item.symbol} ${item.name}</span>
+          <strong>${formatInteger(item.updated_rows)} 行</strong>
+          <small>${item.start_date || "-"} 至 ${item.end_date || "-"}，最后更新 ${formatDateTime(item.last_updated_at)}</small>
+        </a>
       `
     )
     .join("");
@@ -142,6 +182,20 @@ function scheduleRefresh() {
 
 function setStatus(message) {
   els.statusText.textContent = message;
+}
+
+function formatDateTime(value) {
+  if (!value) {
+    return "-";
+  }
+  return value.replace("T", " ");
+}
+
+function formatLocalDate(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
 function formatInteger(value) {

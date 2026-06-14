@@ -280,7 +280,11 @@ def stocks_api():
 
 @app.get("/api/data-status")
 def data_status_api():
-    return jsonify(get_data_pull_status())
+    try:
+        update_date = parse_date_arg("update_date")
+    except ValueError as ex:
+        return jsonify({"error": str(ex)}), 400
+    return jsonify(get_data_pull_status(update_date=update_date))
 
 
 @app.get("/api/stocks/<symbol>/prices")

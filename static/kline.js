@@ -33,11 +33,11 @@ document.addEventListener("DOMContentLoaded", () => {
   els.latestCloseText = document.getElementById("latestCloseText");
   els.statusText = document.getElementById("statusText");
 
-  els.stockSelect.addEventListener("change", loadSelectedPrices);
+  els.stockSelect.addEventListener("change", handleStockChange);
   els.reloadButton.addEventListener("click", loadSelectedPrices);
   els.resetRangeButton.addEventListener("click", resetDateRange);
-  els.startDateInput.addEventListener("change", rebuildChart);
-  els.endDateInput.addEventListener("change", rebuildChart);
+  els.startDateInput.addEventListener("change", loadSelectedPrices);
+  els.endDateInput.addEventListener("change", loadSelectedPrices);
   window.addEventListener("resize", resizeChart);
 
   loadStocks();
@@ -60,11 +60,16 @@ async function loadStocks() {
       setStatus("");
       return;
     }
+    setDateInputsForSelectedStock(true);
     await loadSelectedPrices();
   } catch (error) {
     setEmptyMessage(error.message);
     setStatus("加载失败");
   }
+}
+
+function getSelectedStock() {
+  return state.stocks.find((stock) => stock.symbol === els.stockSelect.value) || null;
 }
 
 function renderStockOptions() {
@@ -92,6 +97,11 @@ function selectSymbolFromUrl() {
   els.stockSelect.value = symbol;
 }
 
+async function handleStockChange() {
+  setDateInputsForSelectedStock(true);
+  await loadSelectedPrices();
+}
+
 async function loadSelectedPrices() {
   const symbol = els.stockSelect.value;
   if (!symbol) {
@@ -100,7 +110,16 @@ async function loadSelectedPrices() {
 
   setStatus(`正在加载 ${symbol} 日K数据...`);
   try {
-    const response = await fetch(`/api/stocks/${symbol}/prices`);
+    normalizeDateInputs();
+    const params = new URLSearchParams();
+    if (els.startDateInput.value) {
+      params.set("start_date", els.startDateInput.value);
+    }
+    if (els.endDateInput.value) {
+      params.set("end_date", els.endDateInput.value);
+    }
+    const query = params.toString();
+    const response = await fetch(`/api/stocks/${symbol}/prices${query ? `?${query}` : ""}`);
     if (!response.ok) {
       const data = await response.json();
       throw new Error(data.error || "价格接口请求失败");
@@ -108,7 +127,7 @@ async function loadSelectedPrices() {
 
     const data = await response.json();
     state.allPrices = data.prices || [];
-    syncDateInputs();
+    syncDateInputsFromPrices();
     rebuildChart();
     setStatus(`已加载 ${symbol} 日K数据`);
   } catch (error) {
@@ -119,6 +138,69 @@ async function loadSelectedPrices() {
     setEmptyMessage(error.message);
     setStatus("加载失败");
   }
+}
+
+function setDateInputsForSelectedStock(useRecentDefault) {
+  const stock = getSelectedStock();
+  const startDate = stock?.start_date || "";
+  const endDate = stock?.end_date || "";
+  els.startDateInput.min = startDate;
+  els.startDateInput.max = endDate;
+  els.endDateInput.min = startDate;
+  els.endDateInput.max = endDate;
+
+  if (!startDate || !endDate) {
+    els.startDateInput.value = "";
+    els.endDateInput.value = "";
+    return;
+  }
+
+  els.endDateInput.value = endDate;
+  if (useRecentDefault) {
+    els.startDateInput.value = maxDate(startDate, shiftDate(endDate, -365));
+  } else {
+    els.startDateInput.value = startDate;
+  }
+}
+
+function syncDateInputsFromPrices() {
+  const prices = state.allPrices;
+  const startDate = prices[0]?.trade_date || "";
+  const endDate = prices[prices.length - 1]?.trade_date || "";
+  if (!els.startDateInput.min && startDate) {
+    els.startDateInput.min = startDate;
+  }
+  if (!els.startDateInput.max && endDate) {
+    els.startDateInput.max = endDate;
+  }
+  if (!els.endDateInput.min && startDate) {
+    els.endDateInput.min = startDate;
+  }
+  if (!els.endDateInput.max && endDate) {
+    els.endDateInput.max = endDate;
+  }
+  if (!els.startDateInput.value) {
+    els.startDateInput.value = startDate;
+  }
+  if (!els.endDateInput.value) {
+    els.endDateInput.value = endDate;
+  }
+}
+
+function shiftDate(value, days) {
+  const date = new Date(`${value}T00:00:00`);
+  date.setDate(date.getDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+function maxDate(left, right) {
+  if (!left) {
+    return right;
+  }
+  if (!right) {
+    return left;
+  }
+  return left > right ? left : right;
 }
 
 function syncDateInputs() {
@@ -133,9 +215,9 @@ function syncDateInputs() {
   els.endDateInput.value = endDate;
 }
 
-function resetDateRange() {
-  syncDateInputs();
-  rebuildChart();
+async function resetDateRange() {
+  setDateInputsForSelectedStock(false);
+  await loadSelectedPrices();
 }
 
 function rebuildChart() {

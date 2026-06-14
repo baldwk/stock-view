@@ -32,6 +32,10 @@
 
   <main class="layout">
     <section class="panel toolbar" aria-label="状态操作">
+      <label>
+        更新日期
+        <input id="updateDateInput" type="date" />
+      </label>
       <button id="reloadButton" type="button">刷新状态</button>
       <button id="autoRefreshButton" class="secondary-button" type="button">暂停自动刷新</button>
       <span id="statusText" class="status-text inline-status">-</span>
@@ -56,6 +60,25 @@
       </article>
     </section>
 
+    <section class="stats" aria-label="当日更新概览">
+      <article class="stat-card">
+        <span>查询更新日</span>
+        <strong id="updateDateText">-</strong>
+      </article>
+      <article class="stat-card">
+        <span>当日更新股票</span>
+        <strong id="updatedStocksText">-</strong>
+      </article>
+      <article class="stat-card">
+        <span>当日更新行数</span>
+        <strong id="updatedRowsText">-</strong>
+      </article>
+      <article class="stat-card">
+        <span>最后更新时间</span>
+        <strong id="lastUpdatedAtText">-</strong>
+      </article>
+    </section>
+
     <section class="panel status-panel" aria-label="进度">
       <div class="section-heading">
         <div>
@@ -71,6 +94,16 @@
     </section>
 
     <section class="status-grid">
+      <article class="panel status-panel">
+        <div class="section-heading">
+          <div>
+            <h2>当日更新样例</h2>
+            <p>展示查询日期内写入或更新过日K的股票。</p>
+          </div>
+        </div>
+        <div id="updatedList" class="status-list"></div>
+      </article>
+
       <article class="panel status-panel">
         <div class="section-heading">
           <div>

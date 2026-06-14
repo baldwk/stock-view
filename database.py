@@ -33,6 +33,7 @@ CREATE TABLE IF NOT EXISTS daily_prices (
     high_price REAL,
     low_price REAL,
     volume REAL,
+    price_updated_at TEXT,
     PRIMARY KEY (symbol, trade_date),
     FOREIGN KEY (symbol) REFERENCES stocks(symbol) ON DELETE CASCADE
 );
@@ -136,6 +137,8 @@ def ensure_daily_price_columns(conn):
         conn.execute("ALTER TABLE daily_prices ADD COLUMN low_price REAL")
     if "volume" not in columns:
         conn.execute("ALTER TABLE daily_prices ADD COLUMN volume REAL")
+    if "price_updated_at" not in columns:
+        conn.execute("ALTER TABLE daily_prices ADD COLUMN price_updated_at TEXT")
 
 
 def upsert_stock(symbol, name):
@@ -208,6 +211,7 @@ def upsert_prices(symbol, prices):
     if not prices:
         return 0
 
+    price_updated_at = datetime.now().astimezone().isoformat(timespec="seconds")
     rows = [
         (
             symbol,
@@ -217,20 +221,31 @@ def upsert_prices(symbol, prices):
             item.get("high_price"),
             item.get("low_price"),
             item.get("volume"),
+            price_updated_at,
         )
         for item in prices
     ]
     with get_connection() as conn:
         conn.executemany(
             """
-            INSERT INTO daily_prices(symbol, trade_date, open_price, close_price, high_price, low_price, volume)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO daily_prices(
+                symbol,
+                trade_date,
+                open_price,
+                close_price,
+                high_price,
+                low_price,
+                volume,
+                price_updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(symbol, trade_date) DO UPDATE SET
                 open_price = excluded.open_price,
                 close_price = excluded.close_price,
                 high_price = excluded.high_price,
                 low_price = excluded.low_price,
-                volume = excluded.volume
+                volume = excluded.volume,
+                price_updated_at = excluded.price_updated_at
             """,
             rows,
         )
@@ -454,7 +469,8 @@ def list_stocks():
                 s.updated_at,
                 COUNT(p.trade_date) AS price_count,
                 MIN(p.trade_date) AS start_date,
-                MAX(p.trade_date) AS end_date
+                MAX(p.trade_date) AS end_date,
+                MAX(p.price_updated_at) AS price_updated_at
             FROM stocks s
             LEFT JOIN daily_prices p ON p.symbol = s.symbol
             GROUP BY s.symbol, s.name, s.market_cap, s.market_cap_updated_at, s.updated_at
@@ -464,7 +480,8 @@ def list_stocks():
     return [dict(row) for row in rows]
 
 
-def get_data_pull_status():
+def get_data_pull_status(update_date=None):
+    resolved_update_date = update_date or datetime.now().astimezone().date().isoformat()
     with get_connection() as conn:
         summary = conn.execute(
             """
@@ -487,6 +504,20 @@ def get_data_pull_status():
                 GROUP BY symbol
             ) price_stats ON price_stats.symbol = s.symbol
             """
+        ).fetchone()
+        update_summary = conn.execute(
+            """
+            SELECT
+                COUNT(DISTINCT symbol) AS updated_stocks,
+                COUNT(*) AS updated_rows,
+                MIN(trade_date) AS updated_start_date,
+                MAX(trade_date) AS updated_end_date,
+                MIN(price_updated_at) AS first_updated_at,
+                MAX(price_updated_at) AS last_updated_at
+            FROM daily_prices
+            WHERE substr(price_updated_at, 1, 10) = ?
+            """,
+            (resolved_update_date,),
         ).fetchone()
         buckets = conn.execute(
             """
@@ -529,11 +560,32 @@ def get_data_pull_status():
             LIMIT 12
             """
         ).fetchall()
+        updated_samples = conn.execute(
+            """
+            SELECT
+                s.symbol,
+                s.name,
+                COUNT(p.trade_date) AS updated_rows,
+                MIN(p.trade_date) AS start_date,
+                MAX(p.trade_date) AS end_date,
+                MAX(p.price_updated_at) AS last_updated_at
+            FROM stocks s
+            JOIN daily_prices p ON p.symbol = s.symbol
+            WHERE substr(p.price_updated_at, 1, 10) = ?
+            GROUP BY s.symbol, s.name
+            ORDER BY last_updated_at DESC, s.symbol
+            LIMIT 12
+            """,
+            (resolved_update_date,),
+        ).fetchall()
 
     result = dict(summary)
+    result["update_date"] = resolved_update_date
+    result["today_update"] = dict(update_summary)
     result["buckets"] = dict(buckets)
     result["loaded_samples"] = [dict(row) for row in loaded_samples]
     result["pending_samples"] = [dict(row) for row in pending_samples]
+    result["updated_samples"] = [dict(row) for row in updated_samples]
     return result
 
 
