@@ -15,6 +15,7 @@ const state = {
   chart: null,
   candleSeries: null,
   volumeSeries: null,
+  isClampingRange: false,
 };
 
 const els = {};
@@ -28,6 +29,7 @@ document.addEventListener("DOMContentLoaded", () => {
   els.klineChart = document.getElementById("klineChart");
   els.klineEmptyState = document.getElementById("klineEmptyState");
   els.stockText = document.getElementById("stockText");
+  els.marketCapText = document.getElementById("marketCapText");
   els.dateRangeText = document.getElementById("dateRangeText");
   els.priceCountText = document.getElementById("priceCountText");
   els.latestCloseText = document.getElementById("latestCloseText");
@@ -264,6 +266,7 @@ function renderChart(prices) {
   state.candleSeries.setData(buildCandles(prices));
   state.volumeSeries.setData(buildVolumes(prices));
   state.chart.timeScale().fitContent();
+  clampVisibleLogicalRange();
 }
 
 function ensureChart() {
@@ -286,6 +289,9 @@ function ensureChart() {
     },
     timeScale: {
       borderColor: "#cbd5e1",
+      fixLeftEdge: true,
+      fixRightEdge: true,
+      rightOffset: 0,
     },
     width: els.klineChart.clientWidth,
     height: els.klineChart.clientHeight,
@@ -314,6 +320,48 @@ function ensureChart() {
       bottom: 0,
     },
   });
+  state.chart.timeScale().subscribeVisibleLogicalRangeChange(clampVisibleLogicalRange);
+}
+
+function clampVisibleLogicalRange() {
+  if (!state.chart || state.isClampingRange || state.prices.length === 0) {
+    return;
+  }
+
+  const range = state.chart.timeScale().getVisibleLogicalRange();
+  if (!range) {
+    return;
+  }
+
+  const minIndex = 0;
+  const maxIndex = state.prices.length - 1;
+  let from = range.from;
+  let to = range.to;
+  const span = to - from;
+
+  if (span >= maxIndex - minIndex) {
+    from = minIndex;
+    to = maxIndex;
+  } else {
+    if (from < minIndex) {
+      to += minIndex - from;
+      from = minIndex;
+    }
+    if (to > maxIndex) {
+      from -= to - maxIndex;
+      to = maxIndex;
+    }
+  }
+
+  from = Math.max(minIndex, from);
+  to = Math.min(maxIndex, to);
+  if (from === range.from && to === range.to) {
+    return;
+  }
+
+  state.isClampingRange = true;
+  state.chart.timeScale().setVisibleLogicalRange({ from, to });
+  state.isClampingRange = false;
 }
 
 function resizeChart() {
@@ -357,10 +405,12 @@ function buildVolumes(prices) {
 
 function updateStats() {
   const selectedOption = els.stockSelect.selectedOptions[0];
+  const selectedStock = getSelectedStock();
   const latest = state.prices[state.prices.length - 1];
   const startDate = state.prices[0]?.trade_date || "-";
   const endDate = latest?.trade_date || "-";
   els.stockText.textContent = selectedOption?.textContent || "-";
+  els.marketCapText.textContent = formatMarketCap(selectedStock?.market_cap);
   els.dateRangeText.textContent = startDate === "-" ? "-" : `${startDate} 至 ${endDate}`;
   els.priceCountText.textContent = String(state.prices.length);
   els.latestCloseText.textContent = latest ? formatNumber(latest.close_price) : "-";
@@ -381,4 +431,18 @@ function formatNumber(value) {
     return "-";
   }
   return number.toFixed(3);
+}
+
+function formatMarketCap(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number) || number <= 0) {
+    return "-";
+  }
+  if (number >= 100000000) {
+    return `${(number / 100000000).toFixed(2)} 亿`;
+  }
+  if (number >= 10000) {
+    return `${(number / 10000).toFixed(2)} 万`;
+  }
+  return number.toFixed(0);
 }
